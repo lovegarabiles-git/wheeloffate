@@ -1,9 +1,390 @@
-<!doctype html>
-<html>
-  <head>
-    <title>This is the title of the webpage!</title>
-  </head>
-  <body>
-    <p>This is an example paragraph. Anything in the <strong>body</strong> tag will appear on the page, just like this <strong>p</strong> tag and its contents.</p>
-  </body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What to Eat? - Decision Wheel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .wheel-container {
+            position: relative;
+            width: 90vw;
+            height: 90vw;
+            max-width: 500px;
+            max-height: 500px;
+        }
+        #wheelCanvas {
+            width: 100%;
+            height: 100%;
+            transition: transform 6s cubic-bezier(0.25, 0.1, 0.25, 1);
+            border-radius: 50%;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1), 0 6px 6px rgba(0,0,0,0.1);
+        }
+        .pointer {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-top: 30px solid #ef4444; /* red-500 */
+            z-index: 10;
+            filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.3));
+        }
+         .center-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 25%;
+            height: 25%;
+            background-color: #f0f8ff;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-family: 'Poppins', sans-serif;
+            font-weight: 700;
+            color: #374151; /* gray-700 */
+            font-size: clamp(1rem, 4vw, 1.5rem);
+            padding: 5px;
+            box-shadow: 0 0 0 10px white, inset 0 0 10px rgba(0,0,0,0.1);
+            line-height: 1.2;
+            pointer-events: none;
+        }
+        #spinBtn {
+            font-family: 'Poppins', sans-serif;
+            transition: all 0.2s ease;
+        }
+        #spinBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+        }
+        #spinBtn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+        #spinBtn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        /* Modal for result */
+        #resultModal {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        .modal-content {
+             animation: zoomIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes zoomIn {
+            from {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        /* Gemini Feature styles */
+        .gemini-btn {
+            background-color: #4f46e5; /* indigo-600 */
+            color: white;
+        }
+        .gemini-btn:hover {
+             background-color: #4338ca; /* indigo-700 */
+        }
+        .loader {
+            border: 4px solid #f3f3f3; /* gray-200 */
+            border-top: 4px solid #4f46e5; /* indigo-600 */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <!-- Title -->
+    <h1 class="text-4xl md:text-5xl font-bold text-gray-800 mb-2 text-center" style="font-family: 'Poppins', sans-serif;">Feeling Hungry?</h1>
+    <p class="text-gray-600 mb-8 text-center">Let fate decide your next meal!</p>
+    
+    <!-- Wheel and Pointer -->
+    <div class="wheel-container mb-8">
+        <div class="pointer"></div>
+        <canvas id="wheelCanvas"></canvas>
+        <div class="center-circle">WHAT<br>TO EAT</div>
+    </div>
+
+    <!-- Buttons -->
+    <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+        <button id="spinBtn" class="bg-red-500 text-white font-bold py-4 px-10 rounded-full text-2xl shadow-lg">
+            SPIN!
+        </button>
+        <button id="suggestCuisineBtn" class="gemini-btn font-bold py-4 px-10 rounded-full text-lg shadow-lg">
+            ✨ Suggest New Cuisine
+        </button>
+    </div>
+    
+    <!-- Result Modal -->
+    <div id="resultModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 opacity-0 pointer-events-none transform scale-95">
+        <div class="modal-content bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full">
+            <p class="text-gray-600 text-lg mb-2">Tonight's dinner is...</p>
+            <h2 id="resultText" class="text-5xl font-bold text-gray-800 mb-6" style="font-family: 'Poppins', sans-serif;"></h2>
+            
+            <div id="geminiRecipe" class="text-left my-4 p-4 bg-gray-50 rounded-lg border border-gray-200 hidden">
+                 <h3 class="font-bold text-lg mb-2 text-gray-700">Recipe Idea:</h3>
+                 <div id="geminiLoader" class="loader"></div>
+                 <p id="geminiContent" class="text-gray-600 whitespace-pre-wrap"></p>
+            </div>
+
+            <div class="flex flex-col space-y-3">
+                <button id="getRecipeBtn" class="gemini-btn font-semibold py-3 px-6 rounded-lg w-full">✨ Get Recipe Idea</button>
+                <button id="closeModalBtn" class="bg-gray-200 text-gray-800 font-semibold py-3 px-6 rounded-lg hover:bg-gray-300 transition w-full">Spin Again</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('wheelCanvas');
+            const spinBtn = document.getElementById('spinBtn');
+            const resultModal = document.getElementById('resultModal');
+            const resultText = document.getElementById('resultText');
+            const closeModalBtn = document.getElementById('closeModalBtn');
+            const getRecipeBtn = document.getElementById('getRecipeBtn');
+            const geminiRecipe = document.getElementById('geminiRecipe');
+            const geminiLoader = document.getElementById('geminiLoader');
+            const geminiContent = document.getElementById('geminiContent');
+            const suggestCuisineBtn = document.getElementById('suggestCuisineBtn');
+
+
+            if (!canvas.getContext) return;
+            
+            const ctx = canvas.getContext('2d');
+            let choices = [
+                'KOREAN', 'LEFTOVERS', 'CHINESE', 'THAI', 'ITALIAN', 'ASK MOM', 
+                'JAPANESE', 'FILIPINO', 'VIETNAMESE', 'MEXICAN', 'INDIAN', 'FAST FOOD'
+            ];
+            
+            const colors = [
+                '#a9e0d9', '#c8e7f5', '#c0b8e6', '#e0c4e8', '#f2c8d9', '#f7d0c4',
+                '#fce1c5', '#fdf0c5', '#e6f2c8', '#d0eac8', '#b8d8be', '#a4c9b3'
+            ];
+
+            let currentAngle = 0;
+            let isSpinning = false;
+            let currentChoice = '';
+            
+            let segmentAngle = 2 * Math.PI / choices.length;
+            const devicePixelRatio = window.devicePixelRatio || 1;
+
+            function resizeCanvas() {
+                const size = Math.min(canvas.parentElement.clientWidth, canvas.parentElement.clientHeight);
+                canvas.width = size * devicePixelRatio;
+                canvas.height = size * devicePixelRatio;
+                canvas.style.width = `${size}px`;
+                canvas.style.height = `${size}px`;
+                ctx.scale(devicePixelRatio, devicePixelRatio);
+                drawWheel();
+            }
+
+            function drawWheel() {
+                segmentAngle = 2 * Math.PI / choices.length;
+                const radius = canvas.width / (2 * devicePixelRatio);
+                if (radius <= 2) return;
+                
+                const centerX = radius;
+                const centerY = radius;
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                choices.forEach((choice, i) => {
+                    const startAngle = i * segmentAngle;
+                    const endAngle = (i + 1) * segmentAngle;
+                    
+                    ctx.beginPath();
+                    ctx.fillStyle = colors[i % colors.length];
+                    ctx.moveTo(centerX, centerY);
+                    ctx.arc(centerX, centerY, radius - 2, startAngle, endAngle);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.save();
+                    ctx.fillStyle = '#374151'; 
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const textAngle = startAngle + segmentAngle / 2;
+                    ctx.translate(
+                        centerX + Math.cos(textAngle) * radius * 0.6,
+                        centerY + Math.sin(textAngle) * radius * 0.6
+                    );
+                    
+                    const rotation = textAngle + Math.PI; 
+                    ctx.rotate(rotation);
+                    
+                    const lines = choice.split(' ');
+                    const fontSize = radius * 0.085;
+                    ctx.font = `bold ${fontSize}px Poppins`;
+                    const lineHeight = fontSize * 1.1;
+                    const totalHeight = (lines.length - 1) * lineHeight;
+                    let y = -totalHeight / 2;
+
+                    lines.forEach(line => {
+                        ctx.fillText(line, 0, y);
+                        y += lineHeight;
+                    });
+                    
+                    ctx.restore();
+                });
+            }
+            
+            function spin() {
+                if (isSpinning) return;
+                isSpinning = true;
+                spinBtn.disabled = true;
+
+                const spinDegrees = Math.random() * 360 + 360 * 5;
+                const totalRotation = currentAngle + spinDegrees;
+                
+                canvas.style.transform = `rotate(${totalRotation}deg)`;
+                
+                setTimeout(() => {
+                    const finalAngle = totalRotation % 360;
+                    const pointerAngle = 270; 
+                    const effectiveAngle = (360 - finalAngle + pointerAngle) % 360;
+                    const winningIndex = Math.floor(effectiveAngle / (360 / choices.length));
+                    
+                    currentChoice = choices[winningIndex];
+                    showResult(currentChoice);
+                    
+                    currentAngle = finalAngle;
+                    isSpinning = false;
+                }, 6000); 
+            }
+
+            function showResult(result) {
+                resultText.textContent = result;
+                // Reset Gemini section
+                geminiRecipe.classList.add('hidden');
+                geminiContent.textContent = '';
+                getRecipeBtn.disabled = false;
+                resultModal.classList.remove('opacity-0', 'pointer-events-none', 'scale-95');
+            }
+
+            function closeModal() {
+                resultModal.classList.add('opacity-0', 'pointer-events-none', 'scale-95');
+                spinBtn.disabled = false;
+            }
+
+            async function callGemini(prompt) {
+                const apiKey = ""; // Leave empty, handled by environment
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                const payload = { contents: [{ parts: [{ text: prompt }] }] };
+
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) {
+                       throw new Error(`API Error: ${response.statusText}`);
+                    }
+                    const result = await response.json();
+                    return result.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't think of anything right now.";
+                } catch (error) {
+                    console.error("Gemini API call failed:", error);
+                    return "There was an error getting a suggestion. Please try again.";
+                }
+            }
+            
+            async function handleGetRecipe() {
+                 if (currentChoice === 'ASK MOM' || currentChoice === 'LEFTOVERS' || currentChoice === 'FAST FOOD') {
+                    geminiContent.textContent = "This is a special one! No recipe needed here, just enjoy!";
+                    geminiLoader.classList.add('hidden');
+                    geminiRecipe.classList.remove('hidden');
+                    getRecipeBtn.disabled = true;
+                    return;
+                }
+                
+                geminiRecipe.classList.remove('hidden');
+                geminiLoader.classList.remove('hidden');
+                geminiContent.textContent = '';
+                getRecipeBtn.disabled = true;
+
+                const prompt = `Give me a simple, one-paragraph recipe idea for ${currentChoice}. Be creative and concise.`;
+                const recipeText = await callGemini(prompt);
+                
+                geminiLoader.classList.add('hidden');
+                geminiContent.textContent = recipeText;
+            }
+
+            async function handleSuggestCuisine() {
+                suggestCuisineBtn.disabled = true;
+                suggestCuisineBtn.textContent = 'Thinking...';
+                
+                const existingCuisines = choices.join(', ');
+                const prompt = `Suggest one interesting and delicious world cuisine that is NOT on this list: ${existingCuisines}. Only return the name of the cuisine.`;
+                const newCuisine = await callGemini(prompt);
+
+                if (newCuisine && !newCuisine.includes("error")) {
+                    const oldCuisine = promptToReplaceCuisine(newCuisine.trim());
+                    if (oldCuisine) {
+                        const index = choices.indexOf(oldCuisine);
+                        if (index !== -1) {
+                            choices[index] = newCuisine.trim().toUpperCase();
+                            drawWheel();
+                        }
+                    }
+                } else {
+                     alert("Sorry, couldn't get a suggestion. Please try again!");
+                }
+                
+                suggestCuisineBtn.disabled = false;
+                suggestCuisineBtn.innerHTML = '✨ Suggest New Cuisine';
+            }
+
+            function promptToReplaceCuisine(newCuisine) {
+                let message = `How about trying ${newCuisine}?\n\nWhich cuisine would you like to replace? (Enter the name exactly as it appears on the wheel)\n\n`;
+                choices.forEach(c => message += `- ${c}\n`);
+                
+                const choiceToReplace = prompt(message);
+                if (choiceToReplace && choices.includes(choiceToReplace.toUpperCase())) {
+                    return choiceToReplace.toUpperCase();
+                } else if (choiceToReplace !== null) {
+                    alert("Invalid choice. Please enter a name exactly from the list.");
+                }
+                return null;
+            }
+
+            spinBtn.addEventListener('click', spin);
+            closeModalBtn.addEventListener('click', closeModal);
+            getRecipeBtn.addEventListener('click', handleGetRecipe);
+            suggestCuisineBtn.addEventListener('click', handleSuggestCuisine);
+            window.addEventListener('resize', resizeCanvas);
+
+            resizeCanvas();
+        });
+    </script>
+
+</body>
 </html>
